@@ -1,0 +1,49 @@
+name: Build with nextjs, publish image to CR, and deploy the web app - obi-wan-kenobi
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  build-publish-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@master
+
+    - name: Set up Node version
+      uses: actions/setup-node@v1
+      with:
+        node-version: '12.x'
+
+    - name: npm install, build, and test
+      run: |
+        npm install
+        npm run build --if-present
+        npm run test --if-present
+    - name: Docker Login - Docker Hub
+      uses: Azure/docker-login@v1
+      with:
+        login-server: ${{ secrets.DOCKER_REGISTRY }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build e Push no Azure ACR
+      run: |
+        docker build . --file Dockerfile --tag ${{ secrets.NOME_IMAGEM }}:$GITHUB_RUN_NUMBER
+        docker tag ${{ secrets.NOME_IMAGEM }}:$GITHUB_RUN_NUMBER ${{ secrets.NOME_IMAGEM }}:latest
+        docker push ${{ secrets.NOME_IMAGEM }}
+    - name: Logando no Azure para Deployment
+      uses: Azure/login@v1.1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Azure WebApp Container - Deployment da Aplicacao
+      env:
+        WEB_APP: ${{ secrets.WEB_APP }} 
+        IMAGEM_DEPLOYMENT: ${{ secrets.NOME_IMAGEM }}:latest
+      uses: Azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.WEB_APP }}
+        images: ${{ env.IMAGEM_DEPLOYMENT }}
